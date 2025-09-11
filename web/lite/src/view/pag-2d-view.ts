@@ -24,52 +24,57 @@ export class PAG2dView extends View {
 
   protected override draw() {
     if (this.videoParam.hasAlpha) {
-      this.renderCanvas2DContext.clearRect(0, 0, this.renderCanvas2D.width, this.renderCanvas2D.height);
-      this.renderCanvas2DContext.drawImage(
-        this.videoReader.getVideoElement(),
-        0,
-        0,
-        this.renderCanvas2D.width,
-        this.renderCanvas2D.height,
-      );
-      const frameOne = this.renderCanvas2DContext.getImageData(
-        0,
-        0,
-        this.videoParam.sequenceWidth,
-        this.videoParam.sequenceHeight,
-      );
-      const frameTwo = this.renderCanvas2DContext.getImageData(
-        this.videoParam.alphaStartX,
-        this.videoParam.alphaStartY,
-        this.videoParam.sequenceWidth,
-        this.videoParam.sequenceHeight,
-      );
-      const length = frameOne.data.length / 4;
-      for (let i = 0; i < length; i++) {
-        frameOne.data[i * 4 + 3] = frameTwo.data[i * 4 + 0];
+      try {
+        this.renderCanvas2DContext.clearRect(0, 0, this.renderCanvas2D.width, this.renderCanvas2D.height);
+        this.renderCanvas2DContext.drawImage(
+          this.videoReader.getVideoElement(),
+          0,
+          0,
+          this.renderCanvas2D.width,
+          this.renderCanvas2D.height,
+        );
+        const frameOne = this.renderCanvas2DContext.getImageData(
+          0,
+          0,
+          this.videoParam.sequenceWidth,
+          this.videoParam.sequenceHeight,
+        );
+        const frameTwo = this.renderCanvas2DContext.getImageData(
+          this.videoParam.alphaStartX,
+          this.videoParam.alphaStartY,
+          this.videoParam.sequenceWidth,
+          this.videoParam.sequenceHeight,
+        );
+        const length = frameOne.data.length / 4;
+        for (let i = 0; i < length; i++) {
+          frameOne.data[i * 4 + 3] = frameTwo.data[i * 4 + 0];
+        }
+        this.renderCanvas2DContext.clearRect(0, 0, this.renderCanvas2D.width, this.renderCanvas2D.height);
+        this.renderCanvas2DContext.putImageData(
+          frameOne,
+          0,
+          0,
+          0,
+          0,
+          this.videoParam.sequenceWidth,
+          this.videoParam.sequenceHeight,
+        );
+        this.context.clearRect(0, 0, this.canvas!.width, this.canvas!.height);
+        this.context.drawImage(
+          this.renderCanvas2D,
+          0,
+          0,
+          this.videoParam.sequenceWidth,
+          this.videoParam.sequenceHeight,
+          this.viewportSize.x,
+          this.viewportSize.y,
+          this.viewportSize.width,
+          this.viewportSize.height,
+        );
+      } catch (error) {
+        // iOS 18 fixed canvas error.
+        console.error(error);
       }
-      this.renderCanvas2DContext.clearRect(0, 0, this.renderCanvas2D.width, this.renderCanvas2D.height);
-      this.renderCanvas2DContext.putImageData(
-        frameOne,
-        0,
-        0,
-        0,
-        0,
-        this.videoParam.sequenceWidth,
-        this.videoParam.sequenceHeight,
-      );
-      this.context.clearRect(0, 0, this.canvas!.width, this.canvas!.height);
-      this.context.drawImage(
-        this.renderCanvas2D,
-        0,
-        0,
-        this.videoParam.sequenceWidth,
-        this.videoParam.sequenceHeight,
-        this.viewportSize.x,
-        this.viewportSize.y,
-        this.viewportSize.width,
-        this.viewportSize.height,
-      );
     } else {
       this.context.drawImage(
         this.videoReader.getVideoElement(),

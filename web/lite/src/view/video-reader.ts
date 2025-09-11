@@ -23,7 +23,15 @@ const playVideoElement = async (videoElement: HTMLVideoElement) => {
   try {
     await videoElement.play();
   } catch (error: any) {
-    throw new Error(error.message);
+    const message = error?.message || '';
+    const shouldIgnoreErrors = ['user denied permission', 'save power'];
+    console.error(error);
+    
+    if (
+      shouldIgnoreErrors.every((ignoreError) => !message.includes(ignoreError))
+    ) {
+      throw new Error(error.message);
+    }
   }
 };
 
@@ -108,6 +116,7 @@ export class VideoReader {
     this.videoElement.style.display = 'none';
     this.videoElement.muted = true;
     this.videoElement.playsInline = true;
+    this.videoElement.setAttribute('webkit-playsinline', 'true');
     const clock = new Clock();
     const mp4Data = coverToMp4(videoSequence);
     clock.mark('coverMP4');

@@ -1,5 +1,5 @@
 {
-  "name": "libpag-lite",
+  "name": "@tencent/camp-libpag-lite",
   "version": "0.0.7",
   "description": "Portable Animated Graphics lite.",
   "main": "lib/pag.cjs.js",
