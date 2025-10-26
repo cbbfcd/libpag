@@ -24,12 +24,16 @@ const playVideoElement = async (videoElement: HTMLVideoElement) => {
     await videoElement.play();
   } catch (error: any) {
     const message = error?.message || '';
-    const shouldIgnoreErrors = ['user denied permission', 'save power'];
+    const shouldIgnoreErrors = [
+      'user denied permission',
+      'save power',
+      'interrupted by a call to pause',
+      'interrupted by a new load request',
+      'aborted',
+    ];
     console.error(error);
     
-    if (
-      shouldIgnoreErrors.every((ignoreError) => !message.includes(ignoreError))
-    ) {
+    if (shouldIgnoreErrors.every((ignoreError) => !message.includes(ignoreError))) {
       throw new Error(error.message);
     }
   }
@@ -48,6 +52,7 @@ export class VideoReader {
 
   private _duration: number;
   private videoElement: HTMLVideoElement | undefined;
+  private playPromise: Promise<void> | null = null;
 
   public constructor(videoSequence: VideoSequence) {
     this._duration = videoSequence.frameCount / videoSequence.frameRate;
@@ -71,11 +76,22 @@ export class VideoReader {
   }
 
   public start() {
-    return playVideoElement(this.videoElement as HTMLVideoElement);
+    this.playPromise = playVideoElement(this.videoElement as HTMLVideoElement);
+    return this.playPromise;
   }
 
   public pause() {
-    this.videoElement?.pause();
+    if (this.playPromise) {
+      this.playPromise.then(() => {
+        this.videoElement?.pause();
+      }).catch(() => {
+        // play was interrupted, safe to pause
+        this.videoElement?.pause();
+      });
+      this.playPromise = null;
+    } else {
+      this.videoElement?.pause();
+    }
   }
 
   public seek(time: number) {
@@ -107,6 +123,7 @@ export class VideoReader {
 
   public destroy() {
     this.removeAllListeners();
+    this.playPromise = null;
     this.videoElement = undefined;
     this.destroyed = true;
   }
