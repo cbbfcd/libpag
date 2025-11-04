@@ -5,12 +5,12 @@ export function destroyVerify(constructor: any) {
 
   const proxyFn = (target: { [prop: string]: any }, methodName: string) => {
     const fn = target[methodName];
-    target[methodName] = function (...args: any[]) {
+    target[methodName] = function () {
       if (this['destroyed']) {
         console.error(`Don't call ${methodName} of the PAGView that is destroyed.`);
         return;
       }
-      return fn.call(this, ...args);
+      return fn.apply(this, arguments);
     };
   };
   functions.forEach((name) => proxyFn(constructor.prototype, name));
