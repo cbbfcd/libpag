@@ -30,6 +30,7 @@ const playVideoElement = async (videoElement: HTMLVideoElement) => {
       'interrupted by a call to pause',
       'interrupted by a new load request',
       'aborted',
+      'can only be initiated by a user gesture'
     ];
     console.error(error);
     
