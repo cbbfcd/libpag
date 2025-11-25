@@ -55,6 +55,9 @@ export class VideoReader {
   private videoElement: HTMLVideoElement | undefined;
   private playPromise: Promise<void> | null = null;
 
+  // bobihuang 持有对 blobUrl 的引用先
+  private blobUrl: string | null = null;
+
   public constructor(videoSequence: VideoSequence) {
     this._duration = videoSequence.frameCount / videoSequence.frameRate;
     this.frameRate = videoSequence.frameRate;
@@ -123,13 +126,18 @@ export class VideoReader {
   }
 
   public destroy() {
+    // bobihuang: 调整销毁顺序，先移除监听器（避免事件触发），再释放资源
     this.removeAllListeners();
+    this.releaseVideoElement();
+    this.releaseBlobUrl();
     this.playPromise = null;
-    this.videoElement = undefined;
     this.destroyed = true;
   }
 
   protected load(videoSequence: VideoSequence): any {
+    // bobihuang 如果已存在 Blob URL，先释放
+    this.releaseBlobUrl();
+
     this.videoElement = document.createElement('video');
     this.videoElement.style.display = 'none';
     this.videoElement.muted = true;
@@ -138,10 +146,51 @@ export class VideoReader {
     const clock = new Clock();
     const mp4Data = coverToMp4(videoSequence);
     clock.mark('coverMP4');
-    this.videoElement.src = URL.createObjectURL(new Blob([mp4Data], { type: 'video/mp4' }));
+
+    // bobihuang optimization: release raw data immediately after MP4 generation
+    videoSequence.releaseRawData();
+
+    // bobihuang 记录一下 blobUrl
+    this.blobUrl = URL.createObjectURL(new Blob([mp4Data], { type: 'video/mp4' }));
+    this.videoElement.src = this.blobUrl;
     this.videoElement.load();
     return {
       coverMP4: clock.measure('', 'coverMP4'),
     };
+  }
+
+  // bobihuang 释放
+  private releaseBlobUrl() {
+    if (this.blobUrl) {
+      try {
+        URL.revokeObjectURL(this.blobUrl);
+      } catch (error) {
+        // NOP
+      }
+      this.blobUrl = null;
+    }
+  }
+
+  // bobihuang: 触发浏览器释放解码器，释放内存空间出来
+  private releaseVideoElement() {
+    if (this.videoElement) {
+      try {
+        this.pause();
+        // 断开 Blob URL 连接
+        this.videoElement.removeAttribute('src');
+        // 清空 srcObject（如果有）
+        this.videoElement.srcObject = null;
+        // 触发浏览器释放解码器
+        this.videoElement.load();
+        
+        // bobihuang: 从 DOM 移除（如果已添加），彻底切断引用
+        if (this.videoElement?.parentNode) {
+          this.videoElement.parentNode.removeChild(this.videoElement);
+        }
+      } catch (error) {
+        // NOP
+      }
+      this.videoElement = undefined;
+    }
   }
 }

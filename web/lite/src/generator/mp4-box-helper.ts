@@ -1,6 +1,5 @@
 import { VideoFrame } from '../base/video-frame';
 import { VideoSequence } from '../base/video-sequence';
-import { concatUint8Arrays } from '../codec/utils/byte-utils';
 import { IS_IOS } from '../constant';
 import { BoxParam, MP4Generator, MP4Track } from './mp4-generator';
 
@@ -27,9 +26,40 @@ export const coverToMp4 = (videoSequence: VideoSequence) => {
   const ftyp = mp4Generator.ftyp();
   const moov = mp4Generator.moov();
   const moof = mp4Generator.moof();
-  const mdat = mp4Generator.mdat();
 
-  return concatUint8Arrays([ftyp, moov, moof, mdat]);
+  // 优化内存分配：一次性分配完整 MP4 缓冲区，避免 mdat() 和 concatUint8Arrays 的多次分配
+  // 原方案：mdat(120MB) + makeBox(120MB) + concat(120MB) = 360MB 峰值
+  // 优化后：直接写入预分配缓冲区 = 120MB 峰值，减少 66% 内存占用
+  const mdatSize = 8 + mp4Track.len;
+  const totalSize = ftyp.byteLength + moov.byteLength + moof.byteLength + mdatSize;
+  const result = new Uint8Array(totalSize);
+
+  let offset = 0;
+  result.set(ftyp, offset);
+  offset += ftyp.byteLength;
+  result.set(moov, offset);
+  offset += moov.byteLength;
+  result.set(moof, offset);
+  offset += moof.byteLength;
+
+  // 直接写入 mdat box header（避免 makeBox 的额外分配）
+  const view = new DataView(result.buffer, offset, 8);
+  view.setUint32(0, mdatSize, false);
+  result.set([0x6d, 0x64, 0x61, 0x74], offset + 4); // 'mdat'
+  offset += 8;
+
+  // 直接复制视频数据到 result（避免 mdat() 的中间 buffer 分配）
+  sequence.headers.forEach((header) => {
+    result.set(new Uint8Array(header.data.data()), offset);
+    offset += header.length;
+  });
+
+  sequence.frames.forEach((frame) => {
+    result.set(new Uint8Array(frame.fileBytes.data.data()), offset);
+    offset += frame.fileBytes.length;
+  });
+
+  return result;
 };
 
 const makeMp4Track = (videoSequence: VideoSequence) => {

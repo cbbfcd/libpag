@@ -51,4 +51,12 @@ export const removeAllListeners = (targetNode: HTMLElement) => {
 
     eventHandlers[videoEvent] = eventHandlers[videoEvent]?.filter(({ node }) => node !== targetNode);
   });
+
+  // bobihuang: 彻底清理空数组，避免全局 eventHandlers 持有已销毁节点的引用
+  Object.keys(eventHandlers).forEach((event) => {
+    const videoEvent = event as K;
+    if (eventHandlers[videoEvent]?.length === 0) {
+      delete eventHandlers[videoEvent];
+    }
+  });
 };

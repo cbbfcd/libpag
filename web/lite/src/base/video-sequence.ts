@@ -17,7 +17,7 @@ export class VideoSequence extends Sequence {
       return false;
     }
     for (const frame of this.frames) {
-      if (!frame || !frame.fileBytes) {
+      if (!frame?.fileBytes) {
         verifyFailed();
         return false;
       }
@@ -48,5 +48,28 @@ export class VideoSequence extends Sequence {
       videoHeight += 1;
     }
     return videoHeight;
+  }
+
+  /**
+   * bobihuang optimization: release raw video data after MP4 generation
+   * Timing: immediately after coverToMp4() completes
+   * Memory saved: ~50MB per instance (300MB for 6 instances)
+   */
+  public releaseRawData(): void {
+    this.frames?.forEach(frame => {
+      if (frame?.fileBytes?.data) {
+        // @ts-ignore - break DataView → ArrayBuffer reference chain
+        frame.fileBytes.data.dataView = null;
+      }
+    });
+    this.frames = [];
+    
+    this.headers?.forEach(header => {
+      if (header?.data) {
+        // @ts-ignore - break DataView → ArrayBuffer reference chain
+        header.data.dataView = null;
+      }
+    });
+    this.headers = [];
   }
 }

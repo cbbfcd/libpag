@@ -81,6 +81,10 @@ export class View extends Context {
     this.clearRender();
     this.canvas = null;
     this.videoReader.destroy();
+
+    // bobihuang optimization: reuse VideoSequence.releaseRawData() method
+    this.videoSequence?.releaseRawData();
+
     this.destroyed = true;
   }
   /**
@@ -143,7 +147,20 @@ export class View extends Context {
   }
 
   protected flushLoop() {
+    // bobihuang: 先清除旧的 timer，避免竞态条件导致的多次注册
+    if (this.renderTimer) {
+      window.cancelAnimationFrame(this.renderTimer);
+    }
+    
     this.renderTimer = window.requestAnimationFrame(() => {
+      // bobihuang: 在回调开始时就清空 renderTimer，确保 clearTimer() 能正确识别
+      this.renderTimer = null;
+      
+      // 检查是否已经销毁
+      if (this.destroyed || !this.playing) {
+        return;
+      }
+      
       this.flushLoop();
     });
     if (IS_IOS && this.duration() - this.videoReader.currentTime() <= 1 / this.frameRate()) {
