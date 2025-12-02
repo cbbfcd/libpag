@@ -89,7 +89,7 @@ export class PAGView extends PAGWebGLView {
       const drawMark = Date.now();
       this.draw();
       this.setDebugData({ draw: Date.now() - drawMark });
-      this.updateFPS();
+      // this.updateFPS();
       this.eventManager.emit(EventName.onAnimationUpdate);
     };
 
