@@ -25,9 +25,8 @@ export class Context {
   protected renderTimer: number | null = null;
   protected repeatCount = 0; // 设置动画重复的次数。默认值为 0，只播放一次。如为 -1 动画则无限播放。
 
-  private renderingMode: RenderingMode;
-  private viewScaleMode = ScaleMode.LetterBox;
-  private debugData: DebugData = {
+  // bobihuang: 改为 protected 以便子类直接访问，避免 setDebugData 的对象分配开销
+  protected debugData: DebugData = {
     FPS: 0,
     decodePAGFile: 0,
     createDir: 0,
@@ -37,6 +36,10 @@ export class Context {
     getFrame: 0,
     draw: 0,
   };
+
+  private renderingMode: RenderingMode;
+  private viewScaleMode = ScaleMode.LetterBox;
+  
 
   public constructor(pagFile: PAGFile, canvas: HTMLCanvasElement, options: RenderOptions) {
     const videoSequence = pagFile.getVideoSequence();
@@ -203,7 +206,18 @@ export class Context {
   }
 
   public setDebugData(data: DebugData) {
-    this.debugData = { ...this.debugData, ...data };
+    // bobihuang: 内存泄漏修复 - 直接赋值而非创建新对象
+    // 原方案：{ ...this.debugData, ...data } → 每次调用创建 2 个新对象
+    // 修复后：直接属性赋值 → 0 额外分配
+    // 注意：此方法仅在初始化时调用，不在渲染循环中使用
+    if (data.FPS !== undefined) this.debugData.FPS = data.FPS;
+    if (data.decodePAGFile !== undefined) this.debugData.decodePAGFile = data.decodePAGFile;
+    if (data.createDir !== undefined) this.debugData.createDir = data.createDir;
+    if (data.coverMP4 !== undefined) this.debugData.coverMP4 = data.coverMP4;
+    if (data.writeFile !== undefined) this.debugData.writeFile = data.writeFile;
+    if (data.createDecoder !== undefined) this.debugData.createDecoder = data.createDecoder;
+    if (data.getFrame !== undefined) this.debugData.getFrame = data.getFrame;
+    if (data.draw !== undefined) this.debugData.draw = data.draw;
   }
 
   protected loadContext() {}
