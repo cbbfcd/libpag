@@ -25,6 +25,11 @@ export class PAGWebGLView extends View {
   // private renderingTexture: WebGLTexture | null = null;
   // private renderingFbo: WebGLFramebuffer | null = null;
 
+  // OffscreenCanvas 中间缓冲 - 用于打断 VideoElement 与 WebGL 纹理的直接引用链
+  // 解决 Chromium GPU 进程长时间运行时 SharedImage/GpuMemoryBuffer 累积问题
+  private offscreenCanvas: OffscreenCanvas | HTMLCanvasElement | null = null;
+  private offscreenCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null;
+
   public constructor(pagFile: PAGFile, canvas: HTMLCanvasElement, options: RenderOptions) {
     super(pagFile, canvas, options);
     const gl = this.canvas?.getContext('webgl', {
@@ -45,6 +50,7 @@ export class PAGWebGLView extends View {
         getShaderSourceFromString(FRAGMENT_2D_SHADER),
       );
     }
+    this.initOffscreenCanvas();
     this.loadContext();
   }
 
@@ -59,6 +65,16 @@ export class PAGWebGLView extends View {
     // 错误的顺序会导致：
     // - 先释放 WebGL 资源 → super.destroy() 调用 clearRender() → 访问已释放的 this.gl → 崩溃
     super.destroy();
+
+    // 释放 OffscreenCanvas 资源
+    if (this.offscreenCtx) {
+      // 清空画布内容，帮助释放内存
+      if (this.offscreenCanvas) {
+        this.offscreenCtx.clearRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
+      }
+      this.offscreenCtx = null;
+    }
+    this.offscreenCanvas = null;
 
     // 确保在销毁 WebGL 资源之前检查上下文是否仍然有效
     if (!this.gl || this.gl.isContextLost()) {
@@ -254,15 +270,35 @@ export class PAGWebGLView extends View {
     
     const videoElement = this.videoReader.getVideoElement();
     if (videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-    this.gl.texSubImage2D(
-      this.gl.TEXTURE_2D,
-      0,
-      0,
-      0,
-      this.gl.RGBA,
-      this.gl.UNSIGNED_BYTE,
-      videoElement,
-    );
+
+    // 使用 OffscreenCanvas 中间缓冲，打断 VideoElement 与 WebGL 纹理的直接引用链
+    // 这可以避免 Chromium GPU 进程长时间运行时 SharedImage/GpuMemoryBuffer 累积
+    if (this.offscreenCtx && this.offscreenCanvas) {
+      // 步骤1: VideoElement → OffscreenCanvas (CPU 拷贝，打断 GPU 引用链)
+      this.offscreenCtx.drawImage(videoElement, 0, 0);
+      
+      // 步骤2: OffscreenCanvas → WebGL 纹理 (标准纹理上传路径)
+      this.gl.texSubImage2D(
+        this.gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        this.gl.RGBA,
+        this.gl.UNSIGNED_BYTE,
+        this.offscreenCanvas,
+      );
+    } else {
+      // 降级：直接使用 VideoElement（可能在某些环境下 OffscreenCanvas 初始化失败）
+      this.gl.texSubImage2D(
+        this.gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        this.gl.RGBA,
+        this.gl.UNSIGNED_BYTE,
+        videoElement,
+      );
+    }
   }
 
   private setRectangle(gl: WebGLRenderingContext, x: number, y: number, width: number, height: number) {
@@ -271,5 +307,29 @@ export class PAGWebGLView extends View {
     const y1: number = y;
     const y2: number = y + height;
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([x1, y1, x2, y1, x1, y2, x1, y2, x2, y1, x2, y2]), gl.STATIC_DRAW);
+  }
+
+  /**
+   * 初始化 OffscreenCanvas 中间缓冲
+   * 作用：打断 VideoElement → WebGL 纹理的直接引用链
+   * 原理：VideoElement → OffscreenCanvas (CPU 拷贝) → WebGL 纹理
+   * 这样 Chromium GPU 进程不会保持对 VideoElement 解码缓冲区的引用
+   */
+  private initOffscreenCanvas(): void {
+    const width = this.videoParam.MP4Width;
+    const height = this.videoParam.MP4Height;
+
+    // 优先使用 OffscreenCanvas（性能更好，支持 Worker）
+    // 降级到普通 Canvas（兼容旧浏览器）
+    if (typeof OffscreenCanvas !== 'undefined') {
+      this.offscreenCanvas = new OffscreenCanvas(width, height);
+      this.offscreenCtx = this.offscreenCanvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+    } else {
+      // 降级方案：使用普通 Canvas
+      this.offscreenCanvas = document.createElement('canvas');
+      this.offscreenCanvas.width = width;
+      this.offscreenCanvas.height = height;
+      this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+    }
   }
 }

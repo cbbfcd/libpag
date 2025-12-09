@@ -1,6 +1,6 @@
 {
   "name": "@tencent/camp-libpag-lite",
-  "version": "0.0.12-beta.16",
+  "version": "0.0.12-beta.17",
   "description": "Portable Animated Graphics lite.",
   "main": "lib/pag.cjs.js",
   "module": "lib/pag.esm.js",
